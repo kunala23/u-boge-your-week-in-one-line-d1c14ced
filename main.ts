@@ -4,7 +4,7 @@
 // agent's week to /output/entry.txt. No network, no input data, no
 // dependencies: the line is a constant, validated here before it is written.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 // The line. This week the agent worked through kun's queue of 68 free
@@ -29,12 +29,29 @@ function validate(line: string): void {
   if (line.includes("\n") || line.includes("\r")) {
     throw new Error("entry must be a single line");
   }
+  // No leading/trailing padding and no control characters: either would
+  // silently change what the judge reads versus what was counted above.
+  if (line !== line.trim()) {
+    throw new Error("entry must not have leading or trailing whitespace");
+  }
+  if (/[\u0000-\u001f\u007f]/.test(line)) {
+    throw new Error("entry must not contain control characters");
+  }
 }
 
 function main(): void {
   validate(LINE);
   mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
   writeFileSync(OUTPUT_PATH, LINE, "utf8");
+  // Read-back check: the file the judge reads must be byte-identical to
+  // the validated line — a partial or transformed write must fail loudly
+  // here instead of submitting a different entry.
+  const written = readFileSync(OUTPUT_PATH, "utf8");
+  if (written !== LINE) {
+    throw new Error(
+      `read-back mismatch: wrote ${LINE.length} chars, file holds ${written.length}`,
+    );
+  }
   console.log(`Wrote ${LINE.length} characters to ${OUTPUT_PATH}`);
   console.log(LINE);
 }
